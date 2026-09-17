@@ -16,6 +16,7 @@ interface Driver {
   lng: number;
   status: DriverStatus;
   breached: boolean;
+  heading?: number;
 }
 
 interface GeofenceAlertPayload {
@@ -57,26 +58,75 @@ const DEFAULT_CENTER: LatLng = [10.7769, 106.7009];
 // Leaflet divIcon helpers (inline SVG/HTML only — no default marker images)
 // ---------------------------------------------------------------------------
 
+const DRIVER_STATUS_COLORS: Record<"IDLE" | "BUSY" | "BREACH", string> = {
+  IDLE: "#10B981",
+  BUSY: "#F59E0B",
+  BREACH: "#EF4444",
+};
+
+function getDriverVisualStatus(driver: Driver): "IDLE" | "BUSY" | "BREACH" {
+  return driver.breached ? "BREACH" : driver.status;
+}
+
+function getDriverLabel(driver: Driver): string {
+  const match = driver.id.match(/(\d+)$/);
+  if (match) {
+    return `D-${match[1].padStart(2, "0")}`;
+  }
+  return driver.name.slice(0, 2).toUpperCase();
+}
+
 function buildDriverIcon(driver: Driver): L.DivIcon {
-  const color = driver.breached ? "#ef4444" : driver.status === "IDLE" ? "#22c55e" : "#eab308";
-  const pulseClass = driver.breached ? "driver-marker-breached" : "";
+  const visualStatus = getDriverVisualStatus(driver);
+  const color = DRIVER_STATUS_COLORS[visualStatus];
+  const pulseClass = visualStatus === "BREACH" ? "animate-pulse" : "";
+  const rotation = driver.heading ?? 0;
+  const label = getDriverLabel(driver);
 
   const html = `
-    <div class="${pulseClass}" style="
-      width: 20px;
-      height: 20px;
-      border-radius: 9999px;
-      background: ${color};
-      border: 2px solid white;
-      box-shadow: 0 0 6px rgba(0,0,0,0.6);
-    "></div>
+    <div style="position: relative; width: 36px; height: 36px;">
+      <div class="${pulseClass}" style="
+        width: 30px;
+        height: 30px;
+        margin: 3px auto 0;
+        border-radius: 9999px;
+        background: ${color};
+        border: 2px solid white;
+        box-shadow: 0 0 6px rgba(0,0,0,0.6);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        transform: rotate(${rotation}deg);
+      ">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <rect x="6" y="2" width="12" height="20" rx="4" fill="white" />
+          <rect x="7.5" y="5" width="9" height="5" rx="1.5" fill="${color}" />
+          <rect x="7.5" y="13" width="9" height="5" rx="1.5" fill="${color}" />
+        </svg>
+      </div>
+      <span style="
+        position: absolute;
+        left: 50%;
+        bottom: -6px;
+        transform: translateX(-50%);
+        background: rgba(15, 23, 42, 0.9);
+        color: white;
+        font-size: 9px;
+        font-weight: 600;
+        padding: 1px 4px;
+        border-radius: 4px;
+        white-space: nowrap;
+        line-height: 1.4;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.5);
+      ">${label}</span>
+    </div>
   `;
 
   return L.divIcon({
     html,
     className: "",
-    iconSize: [20, 20],
-    iconAnchor: [10, 10],
+    iconSize: [36, 36],
+    iconAnchor: [18, 18],
   });
 }
 
@@ -297,13 +347,14 @@ export default function App() {
 
         <div className="space-y-1 rounded-lg border border-slate-800 bg-slate-900 p-3 text-xs">
           <div className="flex items-center gap-2">
-            <span className="h-2.5 w-2.5 rounded-full bg-green-500" /> IDLE
+            <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: DRIVER_STATUS_COLORS.IDLE }} /> IDLE
           </div>
           <div className="flex items-center gap-2">
-            <span className="h-2.5 w-2.5 rounded-full bg-yellow-500" /> BUSY
+            <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: DRIVER_STATUS_COLORS.BUSY }} /> BUSY
           </div>
           <div className="flex items-center gap-2">
-            <span className="h-2.5 w-2.5 rounded-full bg-red-500" /> Geofence breach
+            <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: DRIVER_STATUS_COLORS.BREACH }} /> Geofence
+            breach
           </div>
         </div>
       </aside>
