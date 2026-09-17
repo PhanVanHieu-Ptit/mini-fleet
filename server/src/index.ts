@@ -1,23 +1,18 @@
 import { createServer } from "node:http";
 import { randomUUID } from "node:crypto";
 import { WebSocketServer, WebSocket } from "ws";
+import {
+  isPointInPolygon,
+  findNearestAvailableDriver,
+  type Driver,
+  type Coordinates,
+} from "./core-logic";
 
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
 
-type LatLng = [number, number]; // [lat, lng]
-
-type DriverStatus = "IDLE" | "BUSY";
-
-interface Driver {
-  id: string;
-  name: string;
-  lat: number;
-  lng: number;
-  status: DriverStatus;
-  breached: boolean;
-}
+type LatLng = Coordinates;
 
 interface GeofenceAlertPayload {
   driverId: string;
@@ -64,49 +59,6 @@ const GEOFENCE: number[][] = [
   [10.765, 106.685],
   [10.78, 106.675],
 ];
-
-// ---------------------------------------------------------------------------
-// Geometry helpers
-// ---------------------------------------------------------------------------
-
-/** Standard ray-casting point-in-polygon test. `point` and `polygon` entries are [lat, lng]. */
-function isPointInPolygon(point: LatLng, polygon: number[][]): boolean {
-  const [y, x] = point;
-  let inside = false;
-
-  for (let i = 0, j = polygon.length - 1; i < polygon.length; j = i++) {
-    const [yi, xi] = polygon[i];
-    const [yj, xj] = polygon[j];
-
-    const intersects =
-      yi > y !== yj > y && x < ((xj - xi) * (y - yi)) / (yj - yi) + xi;
-
-    if (intersects) inside = !inside;
-  }
-
-  return inside;
-}
-
-/** Haversine great-circle distance in kilometers between two [lat, lng] points. */
-function haversineDistanceKm(a: LatLng, b: LatLng): number {
-  const EARTH_RADIUS_KM = 6371;
-  const toRad = (deg: number) => (deg * Math.PI) / 180;
-
-  const [lat1, lng1] = a;
-  const [lat2, lng2] = b;
-
-  const dLat = toRad(lat2 - lat1);
-  const dLng = toRad(lng2 - lng1);
-
-  const sinDLat = Math.sin(dLat / 2);
-  const sinDLng = Math.sin(dLng / 2);
-
-  const h =
-    sinDLat * sinDLat +
-    Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * sinDLng * sinDLng;
-
-  return 2 * EARTH_RADIUS_KM * Math.asin(Math.min(1, Math.sqrt(h)));
-}
 
 // ---------------------------------------------------------------------------
 // In-memory state
@@ -208,23 +160,13 @@ wss.on("connection", (ws) => {
 function handleRequestRide(payload: RequestRidePayload): void {
   const { pickup } = payload;
 
-  const idleDrivers = drivers.filter((d) => d.status === "IDLE");
-  if (idleDrivers.length === 0) {
+  const result = findNearestAvailableDriver(pickup, drivers);
+  if (!result) {
     console.warn("REQUEST_RIDE received but no IDLE drivers available");
     return;
   }
 
-  let nearest = idleDrivers[0];
-  let nearestDistance = haversineDistanceKm(pickup, [nearest.lat, nearest.lng]);
-
-  for (const driver of idleDrivers.slice(1)) {
-    const distance = haversineDistanceKm(pickup, [driver.lat, driver.lng]);
-    if (distance < nearestDistance) {
-      nearest = driver;
-      nearestDistance = distance;
-    }
-  }
-
+  const { driver: nearest, distanceKm: nearestDistance } = result;
   nearest.status = "BUSY";
 
   broadcast({
