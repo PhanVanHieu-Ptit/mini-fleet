@@ -4,9 +4,11 @@ import { WebSocketServer, WebSocket } from "ws";
 import {
   isPointInPolygon,
   findNearestAvailableDriver,
+  formatNoDriversLog,
+  NO_AVAILABLE_DRIVERS_MESSAGE,
   type Driver,
   type Coordinates,
-} from "./core-logic";
+} from "./core-logic.js";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -31,6 +33,11 @@ interface RequestRidePayload {
   pickup: LatLng;
 }
 
+interface RideRejectedPayload {
+  reason: string;
+  timestamp: number;
+}
+
 interface TriggerBreachPayload {
   driverId: string;
 }
@@ -39,7 +46,8 @@ type ServerMessage =
   | { type: "INIT_STATE"; payload: { drivers: Driver[]; geofence: number[][] } }
   | { type: "DRIVER_UPDATES"; payload: Driver[] }
   | { type: "GEOFENCE_ALERT"; payload: GeofenceAlertPayload }
-  | { type: "RIDE_DISPATCHED"; payload: RideDispatchedPayload };
+  | { type: "RIDE_DISPATCHED"; payload: RideDispatchedPayload }
+  | { type: "RIDE_REJECTED"; payload: RideRejectedPayload };
 
 type ClientMessage =
   | { type: "REQUEST_RIDE"; payload: RequestRidePayload }
@@ -87,7 +95,7 @@ const drivers: Driver[] = createInitialDrivers();
 // WebSocket server
 // ---------------------------------------------------------------------------
 
-const PORT = 8080;
+const PORT = Number(process.env.PORT) || 8080;
 
 const httpServer = createServer();
 const wss = new WebSocketServer({ server: httpServer });
@@ -148,7 +156,7 @@ wss.on("connection", (ws) => {
     }
 
     if (message.type === "REQUEST_RIDE") {
-      handleRequestRide(message.payload);
+      handleRequestRide(ws, message.payload);
     } else if (message.type === "TRIGGER_BREACH") {
       handleTriggerBreach(message.payload);
     }
@@ -157,12 +165,16 @@ wss.on("connection", (ws) => {
   ws.on("close", () => console.log("Client disconnected"));
 });
 
-function handleRequestRide(payload: RequestRidePayload): void {
+function handleRequestRide(ws: WebSocket, payload: RequestRidePayload): void {
   const { pickup } = payload;
 
   const result = findNearestAvailableDriver(pickup, drivers);
   if (!result) {
-    console.warn("REQUEST_RIDE received but no IDLE drivers available");
+    console.error(formatNoDriversLog());
+    send(ws, {
+      type: "RIDE_REJECTED",
+      payload: { reason: NO_AVAILABLE_DRIVERS_MESSAGE, timestamp: Date.now() },
+    });
     return;
   }
 

@@ -31,20 +31,26 @@ interface RideDispatchedPayload {
   distanceKm: number;
 }
 
+interface RideRejectedPayload {
+  reason: string;
+  timestamp: number;
+}
+
 type ServerMessage =
   | { type: "INIT_STATE"; payload: { drivers: Driver[]; geofence: number[][] } }
   | { type: "DRIVER_UPDATES"; payload: Driver[] }
   | { type: "GEOFENCE_ALERT"; payload: GeofenceAlertPayload }
-  | { type: "RIDE_DISPATCHED"; payload: RideDispatchedPayload };
+  | { type: "RIDE_DISPATCHED"; payload: RideDispatchedPayload }
+  | { type: "RIDE_REJECTED"; payload: RideRejectedPayload };
 
 interface LogEvent {
   id: string;
-  kind: "alert" | "dispatch" | "info";
+  kind: "alert" | "dispatch" | "info" | "error";
   message: string;
   timestamp: number;
 }
 
-const WS_URL = "ws://localhost:8080";
+const WS_URL = import.meta.env.VITE_WS_URL ?? "ws://localhost:8080";
 const DEFAULT_CENTER: LatLng = [10.7769, 106.7009];
 
 // ---------------------------------------------------------------------------
@@ -168,6 +174,9 @@ export default function App() {
             `Ride ${message.payload.rideId.slice(0, 8)} dispatched to ${message.payload.driverId} (${message.payload.distanceKm} km)`
           );
           break;
+        case "RIDE_REJECTED":
+          pushEvent("error", `[ERROR] ${message.payload.reason}`, message.payload.timestamp);
+          break;
       }
     };
 
@@ -272,6 +281,8 @@ export default function App() {
                     ? "border-red-500 bg-red-500/10 text-red-200"
                     : event.kind === "dispatch"
                     ? "border-green-500 bg-green-500/10 text-green-200"
+                    : event.kind === "error"
+                    ? "border-rose-600 bg-rose-600/15 text-rose-100"
                     : "border-slate-600 bg-slate-800/50 text-slate-300"
                 }`}
               >
