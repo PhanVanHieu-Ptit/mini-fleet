@@ -76,3 +76,10 @@ export function findNearestAvailableDriver(
 
   return { driver: nearest, distanceKm: nearestDistance };
 }
+
+export const NO_AVAILABLE_DRIVERS_MESSAGE = "No available drivers nearby.";
+
+/** Formats the standard log line emitted when a ride request is rejected for lack of available drivers. */
+export function formatNoDriversLog(): string {
+  return `[ERROR] ${NO_AVAILABLE_DRIVERS_MESSAGE}`;
+}

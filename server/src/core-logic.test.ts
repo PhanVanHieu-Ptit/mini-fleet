@@ -2,6 +2,8 @@ import { describe, it, expect } from "vitest";
 import {
   isPointInPolygon,
   findNearestAvailableDriver,
+  formatNoDriversLog,
+  NO_AVAILABLE_DRIVERS_MESSAGE,
   type Driver,
 } from "./core-logic";
 
@@ -47,5 +49,10 @@ describe("Core Business Logic", () => {
     const result = findNearestAvailableDriver(pickup, drivers);
 
     expect(result).toBeNull();
+  });
+
+  it("Test 4 (No-Driver Error Message): formats the exact [ERROR] log line for a rejected ride request", () => {
+    expect(NO_AVAILABLE_DRIVERS_MESSAGE).toBe("No available drivers nearby.");
+    expect(formatNoDriversLog()).toBe("[ERROR] No available drivers nearby.");
   });
 });
